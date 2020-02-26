@@ -1,13 +1,9 @@
-#include <stdio.h>
 #include <string.h>
-#include <avr/io.h>
-
-//Comment out the following line to remove debugging code from compiled version.
-// #define DEBUG
+#include <avr/interrupt.h>
 
 typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */
 
-#define WORKSPACE     256
+#define WORKSPACE    256
 #define MAXPROCESS   4
 
 /**
@@ -17,7 +13,7 @@ typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */
 * context.
 * (See file "switch.S" for details.)
 */
-extern void CSwitch();
+void CSwitch();
 
 /* Prototype */
 void Task_Terminate(void);
@@ -26,7 +22,7 @@ void Task_Terminate(void);
 * Exit_kernel() is used when OS_Start() or Task_Terminate() needs to
 * switch to a new running task.
 */
-extern void Exit_Kernel();
+void Exit_Kernel();
 
 #define Disable_Interrupt()         asm volatile ("cli"::)
 #define Enable_Interrupt()          asm volatile ("sei"::)
@@ -78,23 +74,21 @@ volatile static unsigned int KernelActive;
 /** number of tasks created so far */
 volatile static unsigned int Tasks;
 
+
+
 /**
 * When creating a new task, it is important to initialize its stack just like
 * it has called "Enter_Kernel()"; so that when we switch to it later, we
 * can just restore its execution context on its stack.
 * (See file "cswitch.S" for details.)
 */
-void Kernel_Create_Task_At( PD *p, voidfuncptr f )
-{
+void Kernel_Create_Task_At( PD *p, voidfuncptr f ) {
 	unsigned char *sp;
 	#ifdef DEBUG
 	int counter = 0;
 	#endif
 
 	sp = (unsigned char *) &(p->workSpace[WORKSPACE-1]);
-
-	/*----BEGIN of NEW CODE----*/
-	//Initialize the workspace (i.e., stack) and PD here!
 
 	//Clear the contents of the workspace
 	memset(&(p->workSpace),0,WORKSPACE);
@@ -114,9 +108,10 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
 	*(unsigned char *)sp-- = ((unsigned int)f) & 0xff;
 	*(unsigned char *)sp-- = (((unsigned int)f) >> 8) & 0xff;
 	*(unsigned char *)sp-- = (((unsigned int)f) >> 16) & 0xff;
+
 	#ifdef DEBUG
 	//Fill stack with initial values for development debugging
-	//Registers 0 -> 31 and the status register
+	//Registers 0 -> 31 and the status register and EIND
 	for (counter = 0; counter < 34; counter++)
 	{
 		*(unsigned char *)sp-- = counter;
@@ -125,7 +120,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
 	//Place stack pointer at top of stack
 	sp = sp - 34;
 	#endif
-	
+
 	p->sp = sp;		/* stack pointer into the "workSpace" */
 	p->state = READY;
 }
@@ -134,8 +129,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
 /**
 *  Create a new task
 */
-static void Kernel_Create_Task( voidfuncptr f )
-{
+static void Kernel_Create_Task( voidfuncptr f ) {
 	int x;
 
 	if (Tasks == MAXPROCESS) return;  /* Too many task! */
@@ -153,8 +147,7 @@ static void Kernel_Create_Task( voidfuncptr f )
 * This internal kernel function is a part of the "scheduler". It chooses the
 * next task to run, i.e., CurrentP.
 */
-void Dispatch()
-{
+void Dispatch() {
 	/* find the next READY task
 	* Note: if there is no READY task, then this will loop forever!.
 	*/
@@ -165,7 +158,7 @@ void Dispatch()
 	/* we have a new CurrentP */
 	CurrentP = &(Process[NextP]);
 	CurrentP->state = RUNNING;
-	
+
 	//Moved to bottom (this was in the wrong place).
 	NextP = (NextP + 1) % MAXPROCESS;
 }
@@ -174,8 +167,7 @@ void Dispatch()
 * This function initializes the RTOS and must be called before any other
 * system calls.
 */
-void OS_Init()
-{
+void OS_Init() {
 	int x;
 
 	Tasks = 0;
@@ -192,10 +184,11 @@ void OS_Init()
 /**
 * This function starts the RTOS after creating a few tasks.
 */
-void OS_Start()
-{
+void OS_Start() {
 	if ( (! KernelActive) && (Tasks > 0)) {
 		Disable_Interrupt();
+
+		/* here we go...  */
 		KernelActive = 1;
 		asm ( "jmp Exit_Kernel":: );
 	}
@@ -207,8 +200,7 @@ void OS_Start()
 * each task gives up its share of the processor voluntarily by calling
 * Task_Next().
 */
-void Task_Create( voidfuncptr f)
-{
+void Task_Create( voidfuncptr f) {
 	Disable_Interrupt();
 	Kernel_Create_Task( f );
 	Enable_Interrupt();
@@ -217,8 +209,7 @@ void Task_Create( voidfuncptr f)
 /**
 * The calling task gives up its share of the processor voluntarily.
 */
-void Task_Next()
-{
+void Task_Next() {
 	if (KernelActive) {
 		Disable_Interrupt();
 		CurrentP ->state = READY;
@@ -228,12 +219,10 @@ void Task_Next()
 	}
 }
 
-
 /**
 * The calling task terminates itself.
 */
-void Task_Terminate()
-{
+void Task_Terminate() {
 	if (KernelActive) {
 		Disable_Interrupt();
 		CurrentP -> state = DEAD;
@@ -242,29 +231,17 @@ void Task_Terminate()
 	}
 }
 
-void high() {
-	PORTC = 0xFF;
-}
-
-void low() {
-	PORTC = 0x0;
-}
-
-void init() {
-	DDRC = 0xFF;
-	PORTC = 0x0;
-}
-
 /**
 * A cooperative "Ping" task.
 * Added testing code for LEDs.
 */
-void Ping()
-{
-	high();
+void Ping() {
 	Enable_Interrupt();
-	for(;;);
-	//Task_Next();
+	for(;;) {
+		PORTE = 0b00100000;
+		// for( int x = 0; x < 32000; ++x );   /* do nothing */
+		// Task_Next();
+	}
 }
 
 
@@ -272,20 +249,26 @@ void Ping()
 * A cooperative "Pong" task.
 * Added testing code for LEDs.
 */
-void Pong()
-{
-	low();
+void Pong() {
 	Enable_Interrupt();
-	for(;;);
-	//Task_Next();
+	for(;;) {
+		PORTE = 0b00010000;
+		// for( int x = 0; x < 32000; ++x );   /* do nothing */
+		// Task_Next();
+	}
 }
 
-void ISR(TIMER0_COMPA_vect) {
+/*
+*  Timer ISR
+*/
+ISR (TIMER0_COMPA_vect) {
+	Disable_Interrupt();
 	Task_Next();
+	Enable_Interrupt();
 }
 
-void configureTimer() {
-	
+
+void Configure_Timer() {
 	Disable_Interrupt();
 	
 	//set timer0 interrupt at 100 Hz
@@ -304,20 +287,20 @@ void configureTimer() {
 	Enable_Interrupt();
 }
 
+void Port_Init() {
+	DDRE = 0xFF;
+	PORTE |= 0x00;
+}
 
 /**
 * This function creates two cooperative tasks, "Ping" and "Pong". Both
 * will run forever.
 */
-int main()
-{
-	Disable_Interrupt();
-	configureTimer();
-	init();
+int main() {
 	OS_Init();
-	Task_Create( Ping );
+	Port_Init();
+	Configure_Timer();
 	Task_Create( Pong );
-	Enable_Interrupt();
+	Task_Create( Ping );
 	OS_Start();
-
 }

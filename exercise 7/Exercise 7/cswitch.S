@@ -5,8 +5,8 @@
 
 /* locations of well-known registers */
 SREG = 0x3F
-SPH = 0x3E
-SPL = 0x3D
+SPH  = 0x3E
+SPL  = 0x3D
 EIND = 0x3C
 
 /*
@@ -15,9 +15,9 @@ EIND = 0x3C
 ;
 ; Push all registers and then the status register.
 ; It is important to keep the order of SAVECTX and RESTORECTX  exactly
-; in reverse. Also, when a new process is created, it is important to 
+; in reverse. Also, when a new process is created, it is important to
 ; initialize its "initial" context in the same order as SAVECTX.
-;	
+;
 .macro	SAVECTX
 	push	r0
 	push	r1
@@ -49,22 +49,22 @@ EIND = 0x3C
 	push	r27
 	push	r28
 	push	r29
-	push r30
-	push r31
-	in r31, EIND
-	push r31
-	in r31, SREG
-	push r31
+	push	r30
+	push	r31
+    in  r16, EIND
+    push    r16
+	in	r16, SREG
+	push	r16
 .endm
 ;
 ; Pop all registers and the status registers
 ;
 .macro	RESTORECTX
-	pop r31
-	out SREG,r16
-	pop r31
-	out EIND,r16
-	pop r31
+	pop	r16
+	out	SREG,r16
+    pop r16
+    out EIND,r16
+	pop	r31
 	pop	r30
 	pop	r29
 	pop	r28
@@ -107,26 +107,26 @@ EIND = 0x3C
   * The actual CSwitch() code begins here.
   *
   * This function is called by a user task. Upon entry, we are using
-  * the CurrentP's stack, on top of which contains the return address 
+  * the CurrentP's stack, on top of which contains the return address
   * of the call to CSwitch(). There are three phases in this function:
   *   1) save current CurrentP's context, and then its H/W stack pointer;
   *   2) choose a new CurrentP;
   *   3) restore the new CurrentP's context, i.e., restore its H/W stack pointer.
-  * 
+  *
   * Assumption: This function is executed with interrupts already disabled.
   *
   * Note: AVR devices use LITTLE endian format, i.e., a 16-bit value starts
   * with the lower-order byte first, then the higher-order byte.
   *
   * void CSwitch();
-  * void Exit_Kernel(); 
+  * void Exit_Kernel();
   */
 CSwitch:
-        /* 
+        /*
           * Assume I = 0, i.e., all interrupts are disabled.
           */
         SAVECTX
-        /* 
+        /*
           * Now, we have saved the CurrentP's context.
           * Save the current H/W stack pointer into CurrentP->sp.
           */
@@ -144,7 +144,7 @@ Exit_Kernel:
         /*
           * We are now ready to restore a new CurrentP's context, i.e.,
           * switching the H/W stack pointer to this new CurrentP->sp.
-          */ 
+          */
         lds  r30, CurrentP
         lds  r31, CurrentP+1  /* Z = (R31,R30) contains the new "sp" */
         ld   r28, Z+
@@ -156,5 +156,10 @@ Exit_Kernel:
           * Note: at the bottom of the CurrentP's context is its return address.
           */
         RESTORECTX
-        reti    /* don't use rti to re-enable interrupts */
+        ;pop r16
+        ;out EIND, r16
+        ;pop r30
+        ;pop r31
+        ;eijmp;
+        ret    /* don't use rti to re-enable interrupts */
 /* end of CSwitch() */
