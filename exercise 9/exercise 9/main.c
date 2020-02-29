@@ -1,6 +1,5 @@
 #include <string.h>
 #include <avr/interrupt.h>
-#include <util/atomic.h>
 
 //Comment out the following line to remove debugging code from compiled version.
 // #define DEBUG
@@ -44,8 +43,8 @@ void Task_Terminate(void);
 */
 extern void Enter_Kernel();
 
-#define Disable_Interrupt() {PORTE=0b00010000; asm volatile ("cli"::);}
-#define Enable_Interrupt()  {PORTE=0b00000000; asm volatile ("sei"::);}
+#define Disable_Interrupt() {PORTC|=0b00000001; asm volatile ("cli"::);}
+#define Enable_Interrupt()  {PORTC&=~(0b00000001); asm volatile ("sei"::);}
 
 
 /**
@@ -310,7 +309,6 @@ void Task_Create(voidfuncptr f) {
 * The calling task gives up its share of the processor voluntarily.
 */
 void Task_Next() {
-	PORTB = 0b01000000;
 	if (KernelActive) {
 		Disable_Interrupt();
 		Cp ->request = NEXT;
@@ -337,7 +335,6 @@ void Task_Terminate() {
 */
 void Ping() {
 	Enable_Interrupt();
-	
 	for(;;) {
 		PORTE = 0b00100000;
 		// for( int x = 0; x < 32000; ++x ) {} /* do nothing */
@@ -356,7 +353,6 @@ void Pong() {
 		PORTE = 0b00010000;
 		// for(int x = 0; x < 32000; ++x) {} /* do nothing */
 		// Task_Next();
-		
 	}
 }
 
@@ -365,7 +361,9 @@ void Pong() {
 */
 ISR (TIMER0_COMPA_vect) {
 	Disable_Interrupt();
+	PORTC |= 0b00000010;
 	Task_Next();
+	PORTC &= ~(0b00000010);
 	Enable_Interrupt();
 }
 
@@ -389,8 +387,11 @@ void Configure_Timer() {
 }
 
 void Port_Init() {
+	DDRC = 0XFF;
+	PORTC = 0x00;
+	
 	DDRE = 0xFF;
-	PORTE |= 0x00;
+	PORTE = 0x00;
 }
 
 /**
